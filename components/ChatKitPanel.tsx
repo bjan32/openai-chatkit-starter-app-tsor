@@ -282,38 +282,75 @@ export function ChatKitPanel({
       feedback: false,
     },
     onClientTool: async (invocation: {
-      name: string;
-      params: Record<string, unknown>;
-    }) => {
-      if (invocation.name === "switch_theme") {
-        const requested = invocation.params.theme;
-        if (requested === "light" || requested === "dark") {
-          if (isDev) {
-            console.debug("[ChatKitPanel] switch_theme", requested);
-          }
-          onThemeRequest(requested);
-          return { success: true };
-        }
-        return { success: false };
+  name: string;
+  params: Record<string, unknown>;
+}) => {
+  if (invocation.name === "switch_theme") {
+    const requested = invocation.params.theme;
+    if (requested === "light" || requested === "dark") {
+      if (isDev) {
+        console.debug("[ChatKitPanel] switch_theme", requested);
+      }
+      onThemeRequest(requested);
+      return { success: true };
+    }
+    return { success: false };
+  }
+
+  if (invocation.name === "record_fact") {
+    const id = String(invocation.params.fact_id ?? "");
+    const text = String(invocation.params.fact_text ?? "");
+    if (!id || processedFacts.current.has(id)) {
+      return { success: true };
+    }
+    processedFacts.current.add(id);
+    void onWidgetAction({
+      type: "save",
+      factId: id,
+      factText: text.replace(/\s+/g, " ").trim(),
+    });
+    return { success: true };
+  }
+
+  // ===========================
+  // 🟣 NEW FOR SCHOOL OF RENOVATING
+  // TOOL: handoff_to_slack
+  // ===========================
+  if (invocation.name === "handoff_to_slack") {
+    try {
+      if (isDev) {
+        console.log("🔥 TOOL INVOCATION:", invocation.params);
       }
 
-      if (invocation.name === "record_fact") {
-        const id = String(invocation.params.fact_id ?? "");
-        const text = String(invocation.params.fact_text ?? "");
-        if (!id || processedFacts.current.has(id)) {
-          return { success: true };
-        }
-        processedFacts.current.add(id);
-        void onWidgetAction({
-          type: "save",
-          factId: id,
-          factText: text.replace(/\s+/g, " ").trim(),
-        });
-        return { success: true };
+      const response = await fetch("/api/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(invocation.params),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
 
-      return { success: false };
-    },
+      return {
+        success: true,
+        message:
+          invocation.params.type === "progressive_profile"
+            ? "Thanks! I’ve saved your details — I’ll personalise things from here."
+            : "Great — your details have been sent to The School of Renovating team. Someone will reach out soon.",
+      };
+    } catch (err) {
+      console.error("❌ Slack handoff failed:", err);
+      return {
+        success: false,
+        message:
+          "Something went wrong sending your details — please try again.",
+      };
+    }
+  }
+
+  return { success: false };
+},
     onResponseEnd: () => {
       onResponseEnd();
     },
